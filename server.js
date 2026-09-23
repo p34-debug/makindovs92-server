@@ -1,12 +1,21 @@
+const http = require('http');
 const WebSocket = require('ws');
 
 const PORT = parseInt(process.env.PORT || '8080', 10);
-const wss = new WebSocket.Server({ port: PORT });
+
+// HTTP-сервер для Render (health-check + WebSocket)
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Makindovs92 Server OK');
+});
+
+// WebSocket привязан к тому же HTTP-серверу
+const wss = new WebSocket.Server({ server });
 
 console.log('Makindovs92 Server запущен на порту', PORT);
 
-const clients = new Map();     // user -> ws
-const history = new Map();     // chatKey -> [messages]
+const clients = new Map();
+const history = new Map();
 
 wss.on('connection', (ws) => {
   let currentUser = null;
@@ -15,7 +24,6 @@ wss.on('connection', (ws) => {
     let msg;
     try { msg = JSON.parse(raw); } catch (e) { return; }
 
-    // === РЕГИСТРАЦИЯ ===
     if (msg.type === 'register') {
       const user = (msg.user || '').trim();
       if (!user) return;
@@ -44,7 +52,6 @@ wss.on('connection', (ws) => {
       return;
     }
 
-    // === СООБЩЕНИЕ ===
     if (msg.type === 'message') {
       if (!currentUser) return;
       const to = (msg.to || '').trim();
@@ -71,7 +78,6 @@ wss.on('connection', (ws) => {
       return;
     }
 
-    // === ИСТОРИЯ ===
     if (msg.type === 'history') {
       if (!currentUser) return;
       const withUser = (msg.with || '').trim();
@@ -84,7 +90,6 @@ wss.on('connection', (ws) => {
       return;
     }
 
-    // === СПИСОК ЮЗЕРОВ ===
     if (msg.type === 'users') {
       ws.send(JSON.stringify({
         type: 'users',
@@ -93,7 +98,6 @@ wss.on('connection', (ws) => {
       return;
     }
 
-    // === PING ===
     if (msg.type === 'ping') {
       ws.send(JSON.stringify({ type: 'pong' }));
       return;
@@ -139,4 +143,7 @@ function pushHistory(user, packet) {
   if (arr.length > 200) arr.shift();
 }
 
-// Render сам делает health-check, отдельный HTTP-сервер НЕ нужен.
+// Запускаем HTTP-сервер (вместе с WebSocket)
+server.listen(PORT, () => {
+  console.log('Makindovs92 Server слушает порт', PORT);
+});
